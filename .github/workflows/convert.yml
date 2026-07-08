@@ -29,7 +29,7 @@ jobs:
           python-version: '3.11'
 
       - name: 파이썬 패키지 설치
-        run: pip install pymupdf
+        run: pip install pymupdf python-pptx
 
       - name: PPTX -> PNG 변환 실행
         run: python scripts/convert.py

@@ -1,4 +1,4 @@
-# CSF Slide Viewer (GitHub 자동 배포판)
+# CSF Slide Viewer
 
 `pptx/` 폴더에 PPTX 파일을 올리기만 하면, 깃허브가 자동으로 이미지로 변환해서
 웹사이트에 띄워줍니다. 서버를 직접 켜둘 필요가 없습니다.

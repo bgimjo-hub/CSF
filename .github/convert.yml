@@ -1,0 +1,49 @@
+name: Convert PPTX to Slides
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pptx/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 코드 가져오기 (LFS 파일 포함)
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: LibreOffice + 한글 폰트 + ffmpeg 설치
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libreoffice fonts-nanum fonts-noto-cjk ffmpeg
+          fc-cache -fv
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 파이썬 패키지 설치
+        run: pip install pymupdf python-pptx
+
+      - name: PPTX -> PNG 변환 실행
+        run: python scripts/convert.py
+
+      - name: 결과물 커밋 & 푸시
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/slides docs/manifest.json
+          if git diff --staged --quiet; then
+            echo "변경 사항 없음"
+          else
+            git commit -m "자동 변환: 슬라이드 이미지 업데이트"
+            git push
+          fi

@@ -1,0 +1,5 @@
+# pptx/ 폴더의 원본 파일은 용량이 클 수 있어서 Git LFS로 관리합니다.
+# (100MB 넘는 파일도 업로드할 수 있게 해줍니다)
+pptx/*.pptx filter=lfs diff=lfs merge=lfs -text
+pptx/*.ppt  filter=lfs diff=lfs merge=lfs -text
+pptx/*.pdf  filter=lfs diff=lfs merge=lfs -text

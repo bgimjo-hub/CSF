@@ -11,43 +11,7 @@ GitHub Actions가 LibreOffice로 변환
 GitHub Pages 사이트에 자동 반영
 ```
 
----
-
-## 처음 한 번만 설정하기
-
-### 1. 이 폴더 전체를 깃허브 저장소에 올리기
-
-1. https://github.com 에서 새 저장소 생성 (Public 으로) — 예: `csf-slide-viewer`
-2. 저장소 페이지 → **Add file** → **Upload files**
-3. 이 폴더 안의 내용물(`pptx/`, `docs/`, `scripts/`, `.github/`, `README.md`, `.gitignore`)을
-   통째로 드래그&드롭 (폴더째로 끌어놔도 브라우저 업로드는 구조를 유지합니다)
-4. **Commit changes** 클릭
-
-> `.github` 폴더는 이름 앞에 점(.)이 있어서 안 보일 수 있습니다. 파인더/탐색기에서
-> "숨김 파일 보기"를 켜서 확인하거나, 안 보이면 이 폴더만 따로 압축해서 올리세요.
-
-### 2. GitHub Pages 켜기 (사이트 주소 만들기)
-
-1. 저장소 페이지 → 상단 **Settings** 탭
-2. 왼쪽 메뉴에서 **Pages** 클릭
-3. **Build and deployment → Source**: `Deploy from a branch` 선택
-4. **Branch**: `main` 선택, 오른쪽 폴더 선택에서 `/docs` 선택 → **Save**
-5. 1분 정도 기다리면 상단에 사이트 주소가 나타남
-   (`https://내아이디.github.io/csf-slide-viewer/` 형태)
-
-이 주소가 팀원들에게 공유할 최종 링크입니다.
-
-### 3. 액션(Actions) 권한 확인
-
-1. 저장소 **Settings → Actions → General**
-2. 아래쪽 **Workflow permissions**에서 **Read and write permissions** 선택 → **Save**
-   (이게 꺼져 있으면 자동 변환 결과를 저장소에 다시 커밋하지 못합니다)
-
-여기까지 하면 준비 끝입니다.
-
----
-
-## 실제로 사용하는 방법 (매번 이것만 반복)
+## 사용하는 방법
 
 1. 저장소의 `pptx` 폴더로 이동
 2. **Add file → Upload files** 클릭

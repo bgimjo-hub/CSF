@@ -178,8 +178,31 @@ def _resolve_run_hyperlinks(shape, slide_part, slide_part_map):
     return None
 
 
+MAX_VIDEO_MB = 90  # GitHub 100MB 제한보다 여유있게 잡은 상한선
+
+
+def _compress_video(raw_bytes: bytes, out_path: Path) -> bool:
+    """추출한 동영상을 웹 재생에 적합한 크기로 압축(mp4/h264). 성공하면 True."""
+    tmp_in = out_path.with_name(out_path.stem + '_src.tmp')
+    tmp_in.write_bytes(raw_bytes)
+    try:
+        r = subprocess.run([
+            'ffmpeg', '-y', '-i', str(tmp_in),
+            '-vf', "scale='min(1280,iw)':-2",
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '28',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            str(out_path)
+        ], capture_output=True, text=True, timeout=600)
+        return r.returncode == 0 and out_path.exists()
+    except Exception:
+        return False
+    finally:
+        tmp_in.unlink(missing_ok=True)
+
+
 def _extract_video(shape, slide_part, media_dir, media_prefix, counter):
-    """도형 XML에서 embed 된 동영상을 찾아 파일로 저장. 없거나 외부연결이면 None."""
+    """도형 XML에서 embed 된 동영상을 찾아 압축 후 저장. 없거나 실패하면 None."""
     try:
         xml = shape._element.xml
     except Exception:
@@ -191,10 +214,18 @@ def _extract_video(shape, slide_part, media_dir, media_prefix, counter):
     try:
         part = slide_part.related_part(rid)
         blob = part.blob
-        ext = Path(part.partname).suffix or '.mp4'
         media_dir.mkdir(exist_ok=True)
-        fname = f'{media_prefix}_{counter}{ext}'
-        (media_dir / fname).write_bytes(blob)
+        fname = f'{media_prefix}_{counter}.mp4'
+        out_path = media_dir / fname
+        if not _compress_video(blob, out_path):
+            out_path.unlink(missing_ok=True)
+            print(f'  [알림] 동영상 압축 실패 (건너뜀)')
+            return None
+        size_mb = out_path.stat().st_size / (1024 * 1024)
+        if size_mb > MAX_VIDEO_MB:
+            print(f'  [알림] 동영상이 압축 후에도 {size_mb:.0f}MB라 제외됨 (깃허브 용량 제한)')
+            out_path.unlink(missing_ok=True)
+            return None
         return f'media/{fname}'
     except Exception:
         return None

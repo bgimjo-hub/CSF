@@ -17,10 +17,11 @@ jobs:
       - name: 코드 가져오기
         uses: actions/checkout@v4
 
-      - name: LibreOffice 설치
+      - name: LibreOffice + 한글 폰트 설치
         run: |
           sudo apt-get update
-          sudo apt-get install -y libreoffice
+          sudo apt-get install -y libreoffice fonts-nanum fonts-noto-cjk
+          fc-cache -fv
 
       - name: Python 설정
         uses: actions/setup-python@v5

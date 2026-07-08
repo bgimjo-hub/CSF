@@ -163,6 +163,36 @@
           "overlays": []
         }
       ]
+    },
+    {
+      "id": "말차카탈로그",
+      "filename": "말차카탈로그.pptx",
+      "title": "말차카탈로그",
+      "source_type": "pptx",
+      "slide_count": 4,
+      "aspect_ratio": 1.777795,
+      "slides": [
+        {
+          "index": 1,
+          "url": "slides/말차카탈로그/slide_0001.png",
+          "overlays": []
+        },
+        {
+          "index": 2,
+          "url": "slides/말차카탈로그/slide_0002.png",
+          "overlays": []
+        },
+        {
+          "index": 3,
+          "url": "slides/말차카탈로그/slide_0003.png",
+          "overlays": []
+        },
+        {
+          "index": 4,
+          "url": "slides/말차카탈로그/slide_0004.png",
+          "overlays": []
+        }
+      ]
     }
   ]
 }

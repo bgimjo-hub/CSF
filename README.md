@@ -1,1 +1,105 @@
-# CSF
+# CSF Slide Viewer (GitHub 자동 배포판)
+
+`pptx/` 폴더에 PPTX 파일을 올리기만 하면, 깃허브가 자동으로 이미지로 변환해서
+웹사이트에 띄워줍니다. 서버를 직접 켜둘 필요가 없습니다.
+
+```
+pptx/ 폴더에 파일 업로드
+   ↓ (자동, 1~3분)
+GitHub Actions가 LibreOffice로 변환
+   ↓
+GitHub Pages 사이트에 자동 반영
+```
+
+---
+
+## 처음 한 번만 설정하기
+
+### 1. 이 폴더 전체를 깃허브 저장소에 올리기
+
+1. https://github.com 에서 새 저장소 생성 (Public 으로) — 예: `csf-slide-viewer`
+2. 저장소 페이지 → **Add file** → **Upload files**
+3. 이 폴더 안의 내용물(`pptx/`, `docs/`, `scripts/`, `.github/`, `README.md`, `.gitignore`)을
+   통째로 드래그&드롭 (폴더째로 끌어놔도 브라우저 업로드는 구조를 유지합니다)
+4. **Commit changes** 클릭
+
+> `.github` 폴더는 이름 앞에 점(.)이 있어서 안 보일 수 있습니다. 파인더/탐색기에서
+> "숨김 파일 보기"를 켜서 확인하거나, 안 보이면 이 폴더만 따로 압축해서 올리세요.
+
+### 2. GitHub Pages 켜기 (사이트 주소 만들기)
+
+1. 저장소 페이지 → 상단 **Settings** 탭
+2. 왼쪽 메뉴에서 **Pages** 클릭
+3. **Build and deployment → Source**: `Deploy from a branch` 선택
+4. **Branch**: `main` 선택, 오른쪽 폴더 선택에서 `/docs` 선택 → **Save**
+5. 1분 정도 기다리면 상단에 사이트 주소가 나타남
+   (`https://내아이디.github.io/csf-slide-viewer/` 형태)
+
+이 주소가 팀원들에게 공유할 최종 링크입니다.
+
+### 3. 액션(Actions) 권한 확인
+
+1. 저장소 **Settings → Actions → General**
+2. 아래쪽 **Workflow permissions**에서 **Read and write permissions** 선택 → **Save**
+   (이게 꺼져 있으면 자동 변환 결과를 저장소에 다시 커밋하지 못합니다)
+
+여기까지 하면 준비 끝입니다.
+
+---
+
+## 실제로 사용하는 방법 (매번 이것만 반복)
+
+1. 저장소의 `pptx` 폴더로 이동
+2. **Add file → Upload files** 클릭
+3. PPTX 파일을 끌어다 놓고 **Commit changes**
+4. 상단 **Actions** 탭에서 자동 변환이 진행되는 걸 확인 (보통 1~3분)
+   - 초록 체크(✓) 표시가 뜨면 완료
+5. 사이트 주소(`https://내아이디.github.io/저장소이름/`)를 새로고침하면
+   방금 올린 발표자료가 목록에 나타남
+
+파일을 여러 개 올려두면 사이트 첫 화면에 카드 목록으로 전부 보이고,
+클릭해서 열람할 수 있습니다.
+
+---
+
+## 파일 삭제/교체하고 싶을 때
+
+`pptx/` 폴더에서 해당 파일을 삭제하고 커밋하면, 다음 자동 변환 때
+사이트 목록에서도 같이 사라집니다. 같은 이름으로 새 파일을 올리면
+자동으로 다시 변환됩니다.
+
+---
+
+## 주의사항
+
+- 이 저장소를 **Public**으로 만들면, 링크를 아는 사람은 누구나 사이트를 볼 수 있습니다.
+  검색엔진에 걸릴 수도 있으니, 외부에 공개되면 안 되는 자료는 올리지 마세요.
+- 변환은 깃허브의 무료 컴퓨터(Actions)에서 실행되며, Public 저장소는 무료 사용량이 넉넉합니다.
+- 슬라이드가 아주 많거나 무거운 PPTX는 변환에 몇 분 더 걸릴 수 있습니다.
+
+---
+
+## 문제 해결
+
+| 증상 | 확인할 것 |
+|---|---|
+| Actions 탭에 빨간 X(실패) 표시 | 그 항목 클릭 → 로그 확인. 보통 "Workflow permissions" 설정(위 3번)을 안 해서 발생 |
+| 사이트에 "manifest.json 을 불러오지 못했습니다" 표시 | Pages 설정이 `/docs` 폴더로 되어 있는지 확인 (위 2번) |
+| 업로드했는데 목록에 안 뜸 | Actions가 아직 실행 중이거나, 파일 확장자가 `.pptx`/`.ppt`인지 확인 |
+| 사이트 주소를 모르겠음 | Settings → Pages 에서 다시 확인 가능 |
+
+---
+
+## 폴더 구조
+
+```
+csf-slide-viewer/
+├── pptx/                     ← 여기에 PPTX 파일을 올리면 됩니다
+├── .github/workflows/
+│   └── convert.yml           ← 자동 변환 워크플로우 (건드릴 필요 없음)
+├── scripts/
+│   └── convert.py            ← 변환 스크립트 (건드릴 필요 없음)
+└── docs/                     ← GitHub Pages가 서빙하는 정적 사이트
+    ├── index.html            ← 뷰어 화면
+    └── manifest.json         ← 자동 생성되는 발표자료 목록 (건드릴 필요 없음)
+```

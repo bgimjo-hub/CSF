@@ -1,8 +1,20 @@
 #!/usr/bin/env python3
 """
-pptx/ 폴더의 .pptx 파일들을 LibreOffice + PyMuPDF로 PNG 슬라이드 이미지로 변환합니다.
-결과는 docs/slides/<deck-id>/slide_0001.png ... 로 저장되고
-docs/manifest.json 에 전체 목록이 기록됩니다.
+pptx/ 폴더의 파일들을 PNG 슬라이드 이미지로 변환합니다.
+
+지원 형식:
+  - .pptx / .ppt  → LibreOffice로 PDF 변환 후 PNG 렌더링
+                    (+ python-pptx 로 링크/동영상 추출, .pptx만 해당)
+  - .pdf          → 바로 PNG 렌더링 (LibreOffice 변환 단계 생략)
+                    (+ PyMuPDF 로 PDF 안의 링크 추출)
+
+추출된 "링크(같은 발표자료 내 슬라이드 이동 포함)"와 "삽입된 동영상"은
+이미지 위에 겹쳐 올릴 수 있는 좌표(overlay) 정보로 manifest.json 에 기록됩니다.
+
+결과:
+  docs/slides/<deck-id>/slide_0001.png ...
+  docs/slides/<deck-id>/media/*.mp4        (pptx에서 추출된 동영상)
+  docs/manifest.json
 
 이 스크립트는 사람이 직접 실행하지 않고, .github/workflows/convert.yml 이
 pptx/ 폴더에 변경이 생길 때마다 자동으로 실행합니다.
@@ -15,6 +27,9 @@ import sys
 from pathlib import Path
 
 import fitz  # PyMuPDF
+from pptx import Presentation
+from pptx.enum.action import PP_ACTION
+from pptx.oxml.ns import qn
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / 'pptx'
@@ -22,13 +37,20 @@ DOCS_DIR = ROOT / 'docs'
 SLIDES_DIR = DOCS_DIR / 'slides'
 DPI = 192  # 2x 고화질
 
+NAME_SUFFIX_RE = re.compile(r'\.(pptx|ppt|pdf)$', re.I)
+
 
 def slugify(name: str) -> str:
-    s = re.sub(r'\.pptx?$', '', name, flags=re.I)
+    s = NAME_SUFFIX_RE.sub('', name)
     s = re.sub(r'[^a-zA-Z0-9가-힣_-]+', '-', s).strip('-')
     return s or 'deck'
 
 
+def title_of(name: str) -> str:
+    return NAME_SUFFIX_RE.sub('', name)
+
+
+# ── LibreOffice: pptx/ppt → pdf ─────────────────────────────────
 def convert_to_pdf(src: Path, out_dir: Path) -> Path:
     r = subprocess.run(
         ['libreoffice', '--headless', '--norestore',
@@ -46,48 +68,248 @@ def convert_to_pdf(src: Path, out_dir: Path) -> Path:
     return pdf
 
 
+# ── PDF → PNG ────────────────────────────────────────────────────
 def render_pngs(pdf_path: Path, out_dir: Path, deck_id: str):
     doc = fitz.open(str(pdf_path))
     mat = fitz.Matrix(DPI / 72, DPI / 72)
     r0 = doc[0].rect
     ratio = round(r0.width / r0.height, 6)
-    slides = []
+    urls = []
     for i, page in enumerate(doc):
         pix = page.get_pixmap(matrix=mat, colorspace=fitz.csRGB, alpha=False)
         fname = f'slide_{i + 1:04d}.png'
         pix.save(str(out_dir / fname))
-        slides.append({'index': i + 1, 'url': f'slides/{deck_id}/{fname}'})
+        urls.append(f'slides/{deck_id}/{fname}')
     n = doc.page_count
     doc.close()
-    return slides, ratio, n
+    return urls, ratio, n
+
+
+# ── PDF 자체의 링크 추출 (PDF로 직접 올린 경우) ─────────────────
+def extract_pdf_overlays(pdf_path: Path):
+    doc = fitz.open(str(pdf_path))
+    result = []
+    for page in doc:
+        rect = page.rect
+        overlays = []
+        for link in page.get_links():
+            r = link.get('from')
+            if not r or not rect.width or not rect.height:
+                continue
+            box = {
+                'x': round(r.x0 / rect.width * 100, 3),
+                'y': round(r.y0 / rect.height * 100, 3),
+                'w': round((r.x1 - r.x0) / rect.width * 100, 3),
+                'h': round((r.y1 - r.y0) / rect.height * 100, 3),
+            }
+            kind = link.get('kind')
+            if kind == fitz.LINK_GOTO:
+                tp = link.get('page')
+                if tp is not None and tp >= 0:
+                    overlays.append({'type': 'link', 'target': {'kind': 'internal', 'slide': tp + 1}, **box})
+            elif kind == fitz.LINK_URI:
+                uri = link.get('uri')
+                if uri:
+                    overlays.append({'type': 'link', 'target': {'kind': 'external', 'url': uri}, **box})
+        result.append(overlays)
+    doc.close()
+    return result
+
+
+# ── PPTX 자체의 링크 / 동영상 추출 ───────────────────────────────
+def _slide_id_map(prs):
+    return {slide.slide_id: idx for idx, slide in enumerate(prs.slides)}
+
+
+def _resolve_click_action(shape, slide_id_map, n_slides):
+    """도형 전체에 걸린 '실행 단추/작업' 링크 (Insert > Action)"""
+    try:
+        ca = shape.click_action
+    except Exception:
+        return None
+    try:
+        if ca.action == PP_ACTION.HYPERLINK:
+            if ca.hyperlink and ca.hyperlink.address:
+                return {'kind': 'external', 'url': ca.hyperlink.address}
+            if ca.target_slide is not None:
+                idx = slide_id_map.get(ca.target_slide.slide_id)
+                if idx is not None:
+                    return {'kind': 'internal', 'slide': idx + 1}
+        elif ca.action == PP_ACTION.FIRST_SLIDE:
+            return {'kind': 'internal', 'slide': 1}
+        elif ca.action == PP_ACTION.LAST_SLIDE:
+            return {'kind': 'internal', 'slide': n_slides}
+        elif ca.action == PP_ACTION.NEXT_SLIDE:
+            return {'kind': 'relative', 'delta': 1}
+        elif ca.action == PP_ACTION.PREVIOUS_SLIDE:
+            return {'kind': 'relative', 'delta': -1}
+    except Exception:
+        pass
+    return None
+
+
+def _resolve_run_hyperlinks(shape, slide_part, slide_part_map):
+    """텍스트 안의 특정 단어/문구에 걸린 하이퍼링크 (있으면 도형 전체를 클릭 영역으로 사용)"""
+    if not shape.has_text_frame:
+        return None
+    try:
+        for para in shape.text_frame.paragraphs:
+            for run in para.runs:
+                hlink = run.hyperlink
+                if hlink is None:
+                    continue
+                if hlink.address:
+                    return {'kind': 'external', 'url': hlink.address}
+                raw = getattr(hlink, '_hlink', None)
+                if raw is None:
+                    continue
+                rid = raw.get(qn('r:id'))
+                if not rid:
+                    continue
+                try:
+                    target_part = slide_part.related_part(rid)
+                    idx = slide_part_map.get(id(target_part))
+                    if idx is not None:
+                        return {'kind': 'internal', 'slide': idx + 1}
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return None
+
+
+def _extract_video(shape, slide_part, media_dir, media_prefix, counter):
+    """도형 XML에서 embed 된 동영상을 찾아 파일로 저장. 없거나 외부연결이면 None."""
+    try:
+        xml = shape._element.xml
+    except Exception:
+        return None
+    m = re.search(r'videoFile[^>]*r:(embed|link)="([^"]+)"', xml)
+    if not m or m.group(1) != 'embed':
+        return None  # 외부 연결(link)은 추출 불가, embed 만 지원
+    rid = m.group(2)
+    try:
+        part = slide_part.related_part(rid)
+        blob = part.blob
+        ext = Path(part.partname).suffix or '.mp4'
+        media_dir.mkdir(exist_ok=True)
+        fname = f'{media_prefix}_{counter}{ext}'
+        (media_dir / fname).write_bytes(blob)
+        return f'media/{fname}'
+    except Exception:
+        return None
+
+
+def extract_pptx_overlays(pptx_path: Path, out_dir: Path, deck_id: str, n_slides: int):
+    """슬라이드별 [{type, x,y,w,h(%), ...}] 리스트 반환. 실패해도 빈 리스트로 조용히 넘어감."""
+    try:
+        prs = Presentation(str(pptx_path))
+    except Exception as e:
+        print(f'  [알림] 링크/동영상 추출 건너뜀 (python-pptx 열기 실패: {e})')
+        return [[] for _ in range(n_slides)]
+
+    sw, sh = prs.slide_width, prs.slide_height
+    if not sw or not sh:
+        return [[] for _ in range(n_slides)]
+
+    slide_id_map = _slide_id_map(prs)
+    slide_part_map = {id(slide.part): idx for idx, slide in enumerate(prs.slides)}
+    media_dir = out_dir / 'media'
+    result = []
+    vcount = 0
+
+    for si, slide in enumerate(prs.slides):
+        overlays = []
+        for shape in slide.shapes:
+            if shape.left is None or shape.top is None or not shape.width or not shape.height:
+                continue
+            box = {
+                'x': round(shape.left / sw * 100, 3),
+                'y': round(shape.top / sh * 100, 3),
+                'w': round(shape.width / sw * 100, 3),
+                'h': round(shape.height / sh * 100, 3),
+            }
+
+            vcount += 1
+            video_url = _extract_video(shape, slide.part, media_dir, f's{si + 1}', vcount)
+            if video_url:
+                overlays.append({'type': 'video', 'src': video_url, **box})
+                continue  # 동영상 도형이면 링크 체크는 생략
+
+            target = _resolve_click_action(shape, slide_id_map, n_slides)
+            if target is None:
+                target = _resolve_run_hyperlinks(shape, slide.part, slide_part_map)
+            if target:
+                overlays.append({'type': 'link', 'target': target, **box})
+
+        result.append(overlays)
+
+    if media_dir.exists() and not any(media_dir.iterdir()):
+        media_dir.rmdir()
+
+    return result
+
+
+# ── 메인 ─────────────────────────────────────────────────────────
+def collect_sources():
+    items = []
+    for src in SRC_DIR.glob('*'):
+        if src.is_file() and src.suffix.lower() in ('.pptx', '.ppt', '.pdf'):
+            items.append(src)
+    return sorted(items, key=lambda p: p.name.lower())
 
 
 def main():
     SLIDES_DIR.mkdir(parents=True, exist_ok=True)
-    pptx_files = sorted(SRC_DIR.glob('*.pptx')) + sorted(SRC_DIR.glob('*.ppt'))
+    sources = collect_sources()
 
     decks = []
-    for src in pptx_files:
+    for src in sources:
+        ext = src.suffix.lower()
         deck_id = slugify(src.name)
         print(f'[변환] {src.name} -> {deck_id}')
         tmp_dir = ROOT / f'_tmp_{deck_id}'
         tmp_dir.mkdir(exist_ok=True)
         try:
-            pdf = convert_to_pdf(src, tmp_dir)
             out_dir = SLIDES_DIR / deck_id
             if out_dir.exists():
                 shutil.rmtree(out_dir)
             out_dir.mkdir(parents=True)
-            slides, ratio, n = render_pngs(pdf, out_dir, deck_id)
+
+            if ext == '.pdf':
+                pdf = src  # 이미 PDF라 변환 단계 생략
+            else:
+                pdf = convert_to_pdf(src, tmp_dir)
+
+            urls, ratio, n = render_pngs(pdf, out_dir, deck_id)
+
+            if ext == '.pptx':  # python-pptx 는 구형 .ppt 미지원
+                overlays_per_slide = extract_pptx_overlays(src, out_dir, deck_id, n)
+            elif ext == '.pdf':
+                overlays_per_slide = extract_pdf_overlays(pdf)
+            else:
+                overlays_per_slide = [[] for _ in range(n)]
+
+            if len(overlays_per_slide) != n:  # 페이지 수 불일치 시 안전하게 무시
+                overlays_per_slide = [[] for _ in range(n)]
+
+            slides = [
+                {'index': i + 1, 'url': urls[i], 'overlays': overlays_per_slide[i]}
+                for i in range(n)
+            ]
+            n_links = sum(1 for s in slides for o in s['overlays'] if o['type'] == 'link')
+            n_videos = sum(1 for s in slides for o in s['overlays'] if o['type'] == 'video')
+
             decks.append({
                 'id': deck_id,
                 'filename': src.name,
-                'title': re.sub(r'\.pptx?$', '', src.name, flags=re.I),
+                'title': title_of(src.name),
+                'source_type': ext.lstrip('.'),
                 'slide_count': n,
                 'aspect_ratio': ratio,
                 'slides': slides,
             })
-            print(f'  -> {n}장 완료')
+            print(f'  -> {n}장 완료 (링크 {n_links}개, 동영상 {n_videos}개)')
         except Exception as e:
             print(f'[오류] {src.name}: {e}', file=sys.stderr)
         finally:

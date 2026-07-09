@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / 'pptx'
 DOCS_DIR = ROOT / 'docs'
 SLIDES_DIR = DOCS_DIR / 'slides'
-DPI = 288  # 3x 고화질 (큰 화면/4K 모니터 대비)
+DPI = 384  # 4x 고화질 (큰 화면/4K 모니터 대비)
 
 NAME_SUFFIX_RE = re.compile(r'\.(pptx|ppt|pdf)$', re.I)
 

@@ -208,51 +208,6 @@
           "overlays": []
         }
       ]
-    },
-    {
-      "id": "Gui-Tea-Group_260402",
-      "filename": "Gui Tea Group_260402.pdf",
-      "title": "Gui Tea Group_260402",
-      "source_type": "pdf",
-      "slide_count": 7,
-      "aspect_ratio": 1.800034,
-      "slides": [
-        {
-          "index": 1,
-          "url": "slides/Gui-Tea-Group_260402/slide_0001.png",
-          "overlays": []
-        },
-        {
-          "index": 2,
-          "url": "slides/Gui-Tea-Group_260402/slide_0002.png",
-          "overlays": []
-        },
-        {
-          "index": 3,
-          "url": "slides/Gui-Tea-Group_260402/slide_0003.png",
-          "overlays": []
-        },
-        {
-          "index": 4,
-          "url": "slides/Gui-Tea-Group_260402/slide_0004.png",
-          "overlays": []
-        },
-        {
-          "index": 5,
-          "url": "slides/Gui-Tea-Group_260402/slide_0005.png",
-          "overlays": []
-        },
-        {
-          "index": 6,
-          "url": "slides/Gui-Tea-Group_260402/slide_0006.png",
-          "overlays": []
-        },
-        {
-          "index": 7,
-          "url": "slides/Gui-Tea-Group_260402/slide_0007.png",
-          "overlays": []
-        }
-      ]
     }
   ]
 }

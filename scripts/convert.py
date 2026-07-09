@@ -301,6 +301,19 @@ def extract_pptx_overlays(pptx_path: Path, out_dir: Path, deck_id: str, n_slides
 
 
 # ── 메인 ─────────────────────────────────────────────────────────
+def is_lfs_pointer(path: Path) -> bool:
+    """Git LFS가 실제 파일 대신 '포인터(껍데기)' 상태로 남아있는지 확인.
+    (100~200바이트 정도의 작은 텍스트 파일로, 실제 파일 내용이 아직 안 받아진 상태)"""
+    try:
+        if path.stat().st_size > 1024:  # 정상 파일은 훨씬 큼
+            return False
+        with open(path, 'rb') as f:
+            head = f.read(60)
+        return b'git-lfs.github.com' in head
+    except Exception:
+        return False
+
+
 def collect_sources():
     items = []
     for src in SRC_DIR.glob('*'):
@@ -314,9 +327,17 @@ def main():
     sources = collect_sources()
 
     decks = []
+    skipped_ids = set()
     for src in sources:
         ext = src.suffix.lower()
         deck_id = slugify(src.name)
+
+        if is_lfs_pointer(src):
+            print(f'[오류] {src.name}: Git LFS 파일이 아직 실제 내용으로 받아지지 않았습니다 '
+                  f'(포인터 상태). 워크플로우의 "git lfs pull" 단계를 확인하세요.', file=sys.stderr)
+            skipped_ids.add(deck_id)
+            continue
+
         print(f'[변환] {src.name} -> {deck_id}')
         tmp_dir = ROOT / f'_tmp_{deck_id}'
         tmp_dir.mkdir(exist_ok=True)
@@ -366,7 +387,9 @@ def main():
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
     # pptx/ 에서 삭제된 파일의 이미지 폴더는 정리
-    valid_ids = {d['id'] for d in decks}
+    # (단, LFS 못 받아온 파일은 '삭제된 것'이 아니라 '일시적으로 실패한 것'이므로
+    #  기존에 만들어둔 이미지가 있다면 지우지 않고 그대로 둡니다)
+    valid_ids = {d['id'] for d in decks} | skipped_ids
     if SLIDES_DIR.exists():
         for child in SLIDES_DIR.iterdir():
             if child.is_dir() and child.name not in valid_ids:

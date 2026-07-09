@@ -10,17 +10,38 @@ on:
 permissions:
   contents: write
 
+# 파일을 연달아 여러 개 올려서 실행이 동시에 여러 개 걸리면 서로 커밋을 밀어내며
+# 충돌하기 쉽습니다. 하나가 끝난 뒤 다음 게 시작되도록 줄을 세웁니다.
+concurrency:
+  group: pptx-convert
+  cancel-in-progress: false
+
 jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
-      - name: 코드 가져오기
+      - name: 코드 가져오기 (LFS 파일 포함)
         uses: actions/checkout@v4
+        with:
+          lfs: true
 
-      - name: LibreOffice + 한글 폰트 설치
+      - name: LFS 파일 실제 내용 확실히 받기
+        run: |
+          git lfs pull
+          # 혹시 포인터(껍데기) 상태로 남은 파일이 있으면 여기서 바로 실패시켜서
+          # 뒤에서 "변환은 됐는데 이상한 결과물"이 나오는 걸 막습니다.
+          for f in pptx/*.pptx pptx/*.ppt pptx/*.pdf; do
+            [ -e "$f" ] || continue
+            if head -c 40 "$f" | grep -q "git-lfs.github.com"; then
+              echo "::error::$f 가 LFS 실제 파일이 아니라 포인터 상태입니다 (받아오기 실패)"
+              exit 1
+            fi
+          done
+
+      - name: LibreOffice + 한글 폰트 + ffmpeg 설치
         run: |
           sudo apt-get update
-          sudo apt-get install -y libreoffice fonts-nanum fonts-noto-cjk
+          sudo apt-get install -y libreoffice fonts-nanum fonts-noto-cjk ffmpeg
           fc-cache -fv
 
       - name: Python 설정
@@ -38,10 +59,23 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/slides docs/manifest.json
-          if git diff --staged --quiet; then
-            echo "변경 사항 없음"
-          else
+          for i in 1 2 3 4 5; do
+            git add docs/slides docs/manifest.json
+            if git diff --staged --quiet; then
+              echo "변경 사항 없음"
+              exit 0
+            fi
             git commit -m "자동 변환: 슬라이드 이미지 업데이트"
-            git push
-          fi
+            if git push; then
+              echo "푸시 성공"
+              exit 0
+            fi
+            echo "충돌 감지, 최신 내용을 받아서 그 위에 다시 반영... ($i/5)"
+            # rebase 대신 reset --soft 사용: 우리가 방금 만든 결과물(변환된 이미지)이
+            # 항상 최신/정답이므로, 충돌 병합 없이 최신 커밋 위에 깨끗하게 다시 올립니다.
+            git fetch origin main
+            git reset --soft origin/main
+            sleep 3
+          done
+          echo "여러 번 재시도했지만 푸시 실패"
+          exit 1

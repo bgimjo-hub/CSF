@@ -258,15 +258,10 @@ button{font-family:inherit;cursor:pointer;background:none;border:none}
 
 <!-- 전체화면 오버레이 -->
 <div id="fsov">
-  <button id="fscls"><i class="ti ti-x"></i></button>
+  <button id="fscls" title="전체화면 닫기 (Esc / F)"><i class="ti ti-x"></i></button>
   <button class="fsnv" id="fnL"><i class="ti ti-chevron-left"></i></button>
   <div id="fssw">
     <img id="fsimg" src="" alt="">
-    <div class="sov">
-      <button class="sovbtn act" title="전체화면 닫기 (Esc / F)" onclick="closeFs()">
-        <i class="ti ti-minimize"></i>
-      </button>
-    </div>
   </div>
   <button class="fsnv" id="fnR"><i class="ti ti-chevron-right"></i></button>
   <div class="fscnt" id="fscnt"></div>
@@ -568,7 +563,7 @@ function updateFs() {
   if (!ovwrap) {
     ovwrap = document.createElement('div');
     ovwrap.className = 'ovwrap';
-    fssw.insertBefore(ovwrap, fssw.querySelector('.sov'));
+    fssw.appendChild(ovwrap);
   }
   ovwrap.innerHTML = '';
   (slides[cur].overlays || []).forEach(o => ovwrap.appendChild(makeOverlayEl(o)));
@@ -577,13 +572,11 @@ function updateFs() {
 function openFs() {
   if (!slides.length) return;
   fsov.classList.add('open');
-  stage.querySelectorAll('.sovbtn:not(.act) i').forEach(i => i.className = 'ti ti-minimize');
   updateFs();
   if (fsov.requestFullscreen) fsov.requestFullscreen().catch(() => {});
 }
 function closeFs() {
   fsov.classList.remove('open');
-  stage.querySelectorAll('.ssw .sovbtn i').forEach(i => i.className = 'ti ti-maximize');
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
 }
 function toggleFs() {

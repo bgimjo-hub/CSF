@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / 'pptx'
 DOCS_DIR = ROOT / 'docs'
 SLIDES_DIR = DOCS_DIR / 'slides'
-DPI = 192  # 2x 고화질
+DPI = 288  # 3x 고화질 (큰 화면/4K 모니터 대비)
 
 NAME_SUFFIX_RE = re.compile(r'\.(pptx|ppt|pdf)$', re.I)
 
@@ -201,18 +201,36 @@ def _compress_video(raw_bytes: bytes, out_path: Path) -> bool:
         tmp_in.unlink(missing_ok=True)
 
 
+def _find_video_rid(xml: str):
+    """도형 XML에서 동영상 관계 rId를 찾는다.
+    PowerPoint는 실제로 삽입(embed)된 동영상도 태그 이름을 'r:link'로 쓰는 경우가
+    많아서(마이크로소프트 특유의 헷갈리는 네이밍), 태그 이름만으로는 내장 여부를
+    판단할 수 없다. 여기서는 rId 후보만 찾고, 실제 내장 여부는 rels 에서 확인한다.
+    p14:media(r:embed) 가 있으면 그게 항상 우선 (PowerPoint 2010+ 호환용 사본).
+    """
+    m = re.search(r'<[a-zA-Z0-9]*:media\b[^>]*r:embed="([^"]+)"', xml)
+    if m:
+        return m.group(1)
+    m = re.search(r'videoFile[^>]*r:(?:embed|link)="([^"]+)"', xml)
+    if m:
+        return m.group(1)
+    return None
+
+
 def _extract_video(shape, slide_part, media_dir, media_prefix, counter):
-    """도형 XML에서 embed 된 동영상을 찾아 압축 후 저장. 없거나 실패하면 None."""
+    """도형 XML에서 삽입된 동영상을 찾아 압축 후 저장. 없거나(=외부 연결) 실패하면 None."""
     try:
         xml = shape._element.xml
     except Exception:
         return None
-    m = re.search(r'videoFile[^>]*r:(embed|link)="([^"]+)"', xml)
-    if not m or m.group(1) != 'embed':
-        return None  # 외부 연결(link)은 추출 불가, embed 만 지원
-    rid = m.group(2)
+    rid = _find_video_rid(xml)
+    if not rid:
+        return None
     try:
-        part = slide_part.related_part(rid)
+        rel = slide_part.rels[rid]
+        if rel.is_external:
+            return None  # 실제로 외부 URL과 연결된 동영상 (내장 아님) — 추출 불가
+        part = rel.target_part
         blob = part.blob
         media_dir.mkdir(exist_ok=True)
         fname = f'{media_prefix}_{counter}.mp4'
@@ -227,7 +245,8 @@ def _extract_video(shape, slide_part, media_dir, media_prefix, counter):
             out_path.unlink(missing_ok=True)
             return None
         return f'media/{fname}'
-    except Exception:
+    except Exception as e:
+        print(f'  [알림] 동영상 추출 실패: {e}')
         return None
 
 

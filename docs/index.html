@@ -167,7 +167,16 @@ button{font-family:inherit;cursor:pointer;background:none;border:none}
   padding:16px;text-align:left;transition:all .17s;cursor:pointer;
   display:flex;flex-direction:column;gap:8px}
 .deckcard:hover{border-color:var(--red);box-shadow:0 6px 18px rgba(30,15,6,.1);transform:translateY(-2px)}
-.dc-ico{font-size:22px;color:var(--red)}
+.dc-thumb{position:relative;width:100%;border-radius:6px;overflow:hidden;
+  background:var(--c2);border:1px solid var(--bl);aspect-ratio:16/9}
+.dc-thumb img{width:100%;height:100%;object-fit:cover;display:block;
+  opacity:0;transition:opacity .2s}
+.dc-thumb img.loaded{opacity:1}
+.dc-thumb .dc-ico{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:26px;color:var(--t4)}
+.dc-badge{position:absolute;bottom:6px;right:6px;font-size:12px;color:#fff;
+  background:rgba(30,15,6,.55);border-radius:5px;padding:3px 6px;
+  backdrop-filter:blur(3px);display:flex;align-items:center}
 .dc-ttl{font-family:'DM Serif Display',serif;font-size:15px;color:var(--t1);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dc-meta{font-size:11px;color:var(--t4);letter-spacing:.04em}
@@ -312,12 +321,40 @@ function renderDeckList() {
   emptyEl.style.display = 'none';
   decks.forEach(d => {
     const icon = d.source_type === 'pdf' ? 'ti-file-type-pdf' : 'ti-file-type-ppt';
+    const firstUrl = d.slides && d.slides[0] ? `./${d.slides[0].url}` : null;
+
     const card = document.createElement('button');
     card.className = 'deckcard';
-    card.innerHTML = `
-      <i class="ti ${icon} dc-ico"></i>
-      <span class="dc-ttl">${d.title || d.filename}</span>
-      <span class="dc-meta">${d.slide_count}장</span>`;
+
+    const thumb = document.createElement('div');
+    thumb.className = 'dc-thumb';
+    thumb.style.aspectRatio = d.aspect_ratio ? String(d.aspect_ratio) : '16/9';
+
+    const ico = document.createElement('i');
+    ico.className = `ti ${icon} dc-ico`;
+    thumb.appendChild(ico);
+
+    if (firstUrl) {
+      const img = document.createElement('img');
+      img.alt = d.title || d.filename;
+      img.loading = 'lazy';
+      img.addEventListener('load', () => img.classList.add('loaded'));
+      img.addEventListener('error', () => img.remove());  // 실패하면 아이콘만 남음
+      img.src = firstUrl;
+      thumb.appendChild(img);
+    }
+
+    const badge = document.createElement('span');
+    badge.className = 'dc-badge';
+    badge.textContent = `${d.slide_count}장`;
+    thumb.appendChild(badge);
+
+    const ttl = document.createElement('span');
+    ttl.className = 'dc-ttl';
+    ttl.textContent = d.title || d.filename;
+
+    card.appendChild(thumb);
+    card.appendChild(ttl);
     card.addEventListener('click', () => openDeck(d));
     decklistEl.appendChild(card);
   });
